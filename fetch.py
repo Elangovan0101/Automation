@@ -62,14 +62,41 @@ def extract_key_info(body):
             order_id = lower_body.split("order id is ")[1].split()[0].strip()  # Get the order ID after 'order id is'
         except IndexError:
             order_id = "Not Found"
-    
+
     # Determine feedback category and sentiment description
-    if "disappointed" in lower_body or "broke" in lower_body:
-        feedback_category = "Product"
-        sentiment = "Negative"  # Use descriptive sentiment
-    elif "satisfied" in lower_body or "happy" in lower_body:
+    positive_keywords = ["satisfied", "happy", "great", "excellent", "love", "good", "awesome", "wonderful"]
+    negative_keywords = ["disappointed", "broke", "bad", "hate", "terrible", "awful", "poor", "not happy", "issue"]
+
+    # Check for positive sentiments
+    if any(keyword in lower_body for keyword in positive_keywords):
         feedback_category = "Product"
         sentiment = "Positive"  # Use descriptive sentiment
+    # Check for negative sentiments
+    elif any(keyword in lower_body for keyword in negative_keywords):
+        feedback_category = "Product"
+        sentiment = "Negative"  # Use descriptive sentiment
+    else:
+        sentiment = "Neutral"  # Default to Neutral if no keywords found
+
+    # Check for specific feedback scenarios
+    if "payment" in lower_body:
+        feedback_category = "Payment Issue"
+    elif "shipping" in lower_body or "delivery" in lower_body:
+        feedback_category = "Shipping Issue"
+    elif "product" in lower_body or "quality" in lower_body or "broke" in lower_body:
+        feedback_category = "Product Quality"
+    elif "disappointed" in lower_body:
+        feedback_category = "Product Issue"
+        sentiment = "Negative"
+    elif "satisfied" in lower_body or "happy" in lower_body:
+        feedback_category = "Product Feedback"
+        sentiment = "Positive"
+    elif "return" in lower_body or "exchange" in lower_body:
+        feedback_category = "Return/Exchange"
+    elif "complaint" in lower_body or "issue" in lower_body:
+        feedback_category = "General Complaint"
+    elif "suggestion" in lower_body or "recommend" in lower_body:
+        feedback_category = "Suggestion"
 
     return {
         "Customer Name": customer_name,
