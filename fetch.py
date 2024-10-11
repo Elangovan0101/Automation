@@ -13,7 +13,6 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 def get_email_body(msg):
     """Extracts the full body of the email."""
     if msg.is_multipart():
-        # Iterate through parts to find plain text or HTML
         for part in msg.walk():
             content_type = part.get_content_type()
             try:
@@ -25,7 +24,6 @@ def get_email_body(msg):
                 print(f"Error decoding part: {e}")
                 continue  # Skip part on failure
     else:
-        # Handle non-multipart email
         try:
             return msg.get_payload(decode=True).decode()
         except Exception as e:
@@ -37,49 +35,37 @@ def extract_key_info(body):
     """Extracts key details from the email body."""
     # Initialize variables
     customer_name = "Not Found"
-    order_id = "Not Found"
+    order_id = "Not Specified"
     feedback_category = "General"
-    sentiment = "Neutral"  # Initialize sentiment description
+    sentiment = "Neutral"
 
     # Convert the body to lower case for easier matching
     lower_body = body.lower()
 
-    # Extract customer name
-    if "my name is" in lower_body:
-        try:
-            customer_name = lower_body.split("my name is ")[1].split()[0].strip()  # Get the name after 'my name is'
-        except IndexError:
-            customer_name = "Not Found"
-    elif "i am" in lower_body:
-        try:
-            customer_name = lower_body.split("i am ")[1].split()[0].strip()  # Get the name after 'I am'
-        except IndexError:
-            customer_name = "Not Found"
+    # Extract customer name using various possible phrases
+    name_patterns = ["my name is", "i am", "this is", "i’m", "my name's"]
+    for pattern in name_patterns:
+        if pattern in lower_body:
+            try:
+                customer_name = lower_body.split(pattern)[1].strip().split()[0]  # Get the name after the pattern
+                break
+            except IndexError:
+                customer_name = "Not Found"
 
-    # Extract order ID
-    if "order id is" in lower_body:
-        try:
-            order_id = lower_body.split("order id is ")[1].split()[0].strip()  # Get the order ID after 'order id is'
-        except IndexError:
-            order_id = "Not Found"
+    # Extract order ID using various possible phrases
+    order_id_patterns = ["order id is", "my order id is", "order id", "order number is", "my order number is"]
+    for pattern in order_id_patterns:
+        if pattern in lower_body:
+            try:
+                order_id = lower_body.split(pattern)[1].strip().split()[0]  # Get the order ID after the detected pattern
+                break
+            except IndexError:
+                order_id = "Not Specified"
 
-    # Determine feedback category and sentiment description
-    positive_keywords = ["satisfied", "happy", "great", "excellent", "love", "good", "awesome", "wonderful"]
-    negative_keywords = ["disappointed", "broke", "bad", "hate", "terrible", "awful", "poor", "not happy", "issue"]
-
-    # Check for positive sentiments
-    if any(keyword in lower_body for keyword in positive_keywords):
-        feedback_category = "Product"
-        sentiment = "Positive"  # Use descriptive sentiment
-    # Check for negative sentiments
-    elif any(keyword in lower_body for keyword in negative_keywords):
-        feedback_category = "Product"
-        sentiment = "Negative"  # Use descriptive sentiment
-    else:
-        sentiment = "Neutral"  # Default to Neutral if no keywords found
-
-    # Check for specific feedback scenarios
-    if "payment" in lower_body:
+    # Determine feedback category and sentiment based on new logic
+    if "damaged" in lower_body and "return" in lower_body:
+        feedback_category = "Return/Exchange - Damaged"
+    elif "payment" in lower_body:
         feedback_category = "Payment Issue"
     elif "shipping" in lower_body or "delivery" in lower_body:
         feedback_category = "Shipping Issue"
@@ -98,36 +84,36 @@ def extract_key_info(body):
     elif "suggestion" in lower_body or "recommend" in lower_body:
         feedback_category = "Suggestion"
 
+    # Check if the message contains essential details
+    if customer_name == "Not Found" or order_id == "Not Specified":
+        return None  # Exclude messages without required information
+
     return {
         "Customer Name": customer_name,
         "Order ID": order_id,
         "Feedback Category": feedback_category,
-        "Sentiment": sentiment  # Change sentiment score to descriptive
+        "Sentiment": sentiment
     }
 
 def main():
     """Fetches customer feedback and complaint emails from Gmail."""
     creds = None
-    # The file token.json stores the user's access and refresh tokens.
     if os.path.exists('token.json'):
         creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
             creds = flow.run_local_server(port=0)
-        # Save the credentials for the next run
         with open('token.json', 'w') as token:
             token.write(creds.to_json())
 
     try:
-        # Call the Gmail API
         service = build('gmail', 'v1', credentials=creds)
 
         # Query to fetch emails containing feedback/complaint-related keywords
-        query = "feedback OR complaint OR replacement OR issue OR problem OR concern OR disappointed OR satisfied OR experience"
+        query = "feedback OR complaint OR replacement OR issue OR problem OR concern OR disappointed OR satisfied OR experience OR damaged"
         results = service.users().messages().list(userId='me', labelIds=['INBOX'], q=query).execute()
         messages = results.get('messages', [])
 
@@ -155,7 +141,7 @@ def main():
                             break
                     except Exception as e:
                         print(f"Error extracting part: {e}")
-                        continue  # Skip and try the next part
+                        continue
             elif 'body' in payload and 'data' in payload['body']:
                 try:
                     email_msg = email.message_from_bytes(base64.urlsafe_b64decode(payload['body']['data'].encode('UTF-8')))
@@ -166,8 +152,8 @@ def main():
             # Extract key information from the email body
             extracted_info = extract_key_info(body)
 
-            # Exclude messages that do not have required fields
-            if extracted_info["Customer Name"] != "Not Found" and extracted_info["Order ID"] != "Not Found":
+            # Only print messages that have required fields
+            if extracted_info:
                 print(f"Message ID: {msg['id']}\nSubject: {subject}\nExtracted Info: {extracted_info}\n")
 
     except HttpError as error:
