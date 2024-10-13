@@ -1,11 +1,13 @@
 import os
 import base64
 import email
+import re
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from textblob import TextBlob
 
 # If modifying these SCOPES, delete the file token.json.
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
@@ -33,36 +35,24 @@ def get_email_body(msg):
 
 def extract_key_info(body):
     """Extracts key details from the email body."""
-    # Initialize variables
     customer_name = "Not Found"
     order_id = "Not Specified"
     feedback_category = "General"
     sentiment = "Neutral"
-
-    # Convert the body to lower case for easier matching
+    
+    # Convert body to lowercase for easier keyword matching
     lower_body = body.lower()
 
-    # Extract customer name using various possible phrases
-    name_patterns = ["my name is", "i am", "this is", "i’m", "my name's"]
-    for pattern in name_patterns:
-        if pattern in lower_body:
-            try:
-                customer_name = lower_body.split(pattern)[1].strip().split()[0]  # Get the name after the pattern
-                break
-            except IndexError:
-                customer_name = "Not Found"
+    # Use regular expressions to extract customer name and order ID
+    name_match = re.search(r"(my name is|i am|this is|i’m)\s+([a-zA-Z]+)", lower_body)
+    if name_match:
+        customer_name = name_match.group(2)
 
-    # Extract order ID using various possible phrases
-    order_id_patterns = ["order id is", "my order id is", "order id", "order number is", "my order number is"]
-    for pattern in order_id_patterns:
-        if pattern in lower_body:
-            try:
-                order_id = lower_body.split(pattern)[1].strip().split()[0]  # Get the order ID after the detected pattern
-                break
-            except IndexError:
-                order_id = "Not Specified"
+    order_id_match = re.search(r"(order id is|order number is|my order id is|order id)\s+([a-zA-Z0-9\-]+)", lower_body)
+    if order_id_match:
+        order_id = order_id_match.group(2)
 
-    # Determine feedback category and sentiment based on new logic
+    # Determine feedback category based on keywords
     if "damaged" in lower_body and "return" in lower_body:
         feedback_category = "Return/Exchange - Damaged"
     elif "payment" in lower_body:
@@ -73,16 +63,16 @@ def extract_key_info(body):
         feedback_category = "Product Quality"
     elif "disappointed" in lower_body:
         feedback_category = "Product Issue"
-        sentiment = "Negative"
-    elif "satisfied" in lower_body or "happy" in lower_body:
-        feedback_category = "Product Feedback"
-        sentiment = "Positive"
     elif "return" in lower_body or "exchange" in lower_body:
         feedback_category = "Return/Exchange"
     elif "complaint" in lower_body or "issue" in lower_body:
         feedback_category = "General Complaint"
     elif "suggestion" in lower_body or "recommend" in lower_body:
         feedback_category = "Suggestion"
+
+    # Use TextBlob to determine the sentiment of the message
+    analysis = TextBlob(body)
+    sentiment = "Positive" if analysis.sentiment.polarity > 0 else "Negative" if analysis.sentiment.polarity < 0 else "Neutral"
 
     # Check if the message contains essential details
     if customer_name == "Not Found" or order_id == "Not Specified":
@@ -98,22 +88,22 @@ def extract_key_info(body):
 def main():
     """Fetches customer feedback and complaint emails from Gmail."""
     creds = None
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    if os.path.exists('token1.json'):
+        creds = Credentials.from_authorized_user_file('token1.json', SCOPES)
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
             creds = flow.run_local_server(port=0)
-        with open('token.json', 'w') as token:
+        with open('token1.json', 'w') as token:
             token.write(creds.to_json())
 
     try:
         service = build('gmail', 'v1', credentials=creds)
 
         # Query to fetch emails containing feedback/complaint-related keywords
-        query = "feedback OR complaint OR replacement OR issue OR problem OR concern OR disappointed OR satisfied OR experience OR damaged"
+        query = "shipping OR delivery OR delay OR late OR feedback OR complaint OR replacement OR issue OR problem OR concern OR disappointed OR satisfied OR experience OR damaged"
         results = service.users().messages().list(userId='me', labelIds=['INBOX'], q=query).execute()
         messages = results.get('messages', [])
 
