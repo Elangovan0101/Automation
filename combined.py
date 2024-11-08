@@ -27,20 +27,19 @@ def get_email_body(msg):
             content_type = part.get_content_type()
             try:
                 if content_type == "text/plain":
-                    return part.get_payload(decode=True).decode()  # Return plain text body
+                    return part.get_payload(decode=True).decode()  
                 elif content_type == "text/html":
-                    return part.get_payload(decode=True).decode()  # Return HTML body as fallback
+                    return part.get_payload(decode=True).decode()
             except Exception as e:
                 print(f"Error decoding part: {e}")
-                continue  # Skip part on failure
+                continue  
     else:
         try:
             return msg.get_payload(decode=True).decode()
         except Exception as e:
             print(f"Error decoding non-multipart email: {e}")
-            return ""  # Return empty if decoding fails
-    return ""  # Fallback for any unhandled cases
-
+            return ""
+    return ""
 def extract_key_info(body):
     """Extracts key details from the email body."""
     customer_name = "Not Found"
@@ -50,7 +49,7 @@ def extract_key_info(body):
     
     lower_body = body.lower()
 
-    # Extract customer name and order ID
+    
     name_match = re.search(r"(my name is|i am|this is|i’m)\s+([a-zA-Z]+)", lower_body)
     if name_match:
         customer_name = name_match.group(2)
@@ -59,7 +58,7 @@ def extract_key_info(body):
     if order_id_match:
         order_id = order_id_match.group(2)
 
-    # Determine feedback category based on keywords
+    
     if "damaged" in lower_body and "return" in lower_body:
         feedback_category = "Return/Exchange - Damaged"
     elif "payment" in lower_body:
@@ -149,15 +148,15 @@ def submit_to_google_form(entry):
 def main():
     """Fetches customer feedback and submits to Google Form."""
     creds = None
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    if os.path.exists('token1.json'):
+        creds = Credentials.from_authorized_user_file('token1.json', SCOPES)
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
             creds = flow.run_local_server(port=0)
-        with open('token.json', 'w') as token:
+        with open('token1.json', 'w') as token:
             token.write(creds.to_json())
 
     try:
